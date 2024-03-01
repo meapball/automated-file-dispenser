@@ -1,0 +1,146 @@
+#include <SPI.h>
+#include <MFRC522.h>      // Library for RFID
+#include <Keypad.h>       // Library for Keypad
+#include <AFMotor.h>      // Library for Adafruit Motor Shield
+#include <NewPing.h>      // Library for HC-SR04 sensor
+
+// Define pins for RFID
+const int RST_PIN = 9;      // Configurable, set to whatever the RFID RST pin is connected to
+const int SS_PIN = 10;      // Configurable, set to whatever the RFID SS pin is connected to
+MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+
+// Define pins for Keypad
+const byte ROWS = 4; // Four rows
+const byte COLS = 3; // Three columns
+char keys[ROWS][COLS] = {
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
+};
+byte rowPins[ROWS] = {30, 31, 32, 33}; // Connect to the row pinouts of the keypad
+byte colPins[COLS] = {34, 35, 36};     // Connect to the column pinouts of the keypad
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// Define pins for HC-SR04 sensor
+#define TRIGGER_PIN A0 // Pin connected to the trigger pin of the HC-SR04 sensor
+#define ECHO_PIN A1    // Pin connected to the echo pin of the HC-SR04 sensor
+#define MAX_DISTANCE 200 // Maximum distance to sense, adjust according to your setup
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // Create an instance of the NewPing class for the sensor
+
+// Define motor objects for Adafruit Motor Shield
+AF_DCMotor motor1(1);
+AF_DCMotor motor2(2);
+AF_DCMotor motor3(3);
+AF_DCMotor motor4(4);
+
+void setup() {
+  // Initialize RFID
+  SPI.begin();         // Init SPI bus
+  mfrc522.PCD_Init();  // Init MFRC522
+
+  // Initialize serial communication
+  Serial.begin(9600);
+
+  // Print startup message
+  Serial.println("Ready to dispense files.");
+
+  // Set motor speed and direction pins as output
+  for (int i = 1; i <= 4; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+// Function to move the conveyor
+void moveConveyor(int speed) {
+  motor1.setSpeed(speed);
+  motor1.run(FORWARD);
+}
+
+// Function to move the piston
+void movePiston(int speed) {
+  motor2.setSpeed(speed);
+  motor2.run(FORWARD);
+}
+
+// Function to read RFID
+String readRFID() {
+  // Look for new cards
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return "";
+  }
+  // Select one of the cards
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return "";
+  }
+  // Show some details of the PICC (that is: the tag/card)
+  Serial.print(F("Card UID:"));
+  String content = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
+    Serial.print(mfrc522.uid.uidByte[i], HEX);
+    content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
+    content.concat(String(mfrc522.uid.uidByte[i], HEX));
+  }
+  content.toUpperCase();
+  return content.substring(1);
+}
+
+// Function to read keypad
+String readKeypad() {
+  char key = keypad.getKey();
+  if (key) {
+    return String(key);
+  }
+  return "";
+}
+
+// Function to dispense the file
+void dispenseFile(String folder) {
+  if (folder == "A1" || folder == "A2" || folder == "A3" || folder == "A4" || folder == "A5") {
+    if (isSectionAvailable("A")) {
+      moveConveyor(255); // Example speed
+      delay(1000);       // Adjust delay as needed to reach the desired section
+      movePiston(255);   // Example speed
+      delay(1000);       // Adjust delay as needed to push the file
+      moveConveyor(0);   // Stop the conveyor
+    } else {
+      // Section not available, handle accordingly
+      Serial.println("Section A is occupied. File cannot be dispensed.");
+    }
+  } else if (folder == "B1" || folder == "B2" || folder == "B3" || folder == "B4" || folder == "B5") {
+    if (isSectionAvailable("B")) {
+      moveConveyor(255); // Example speed
+      delay(1000);       // Adjust delay as needed to reach the desired section
+      movePiston(255);   // Example speed
+      delay(1000);       // Adjust delay as needed to push the file
+      moveConveyor(0);   // Stop the conveyor
+    } else {
+      // Section not available, handle accordingly
+      Serial.println("Section B is occupied. File cannot be dispensed.");
+    }
+  } else {
+    // Invalid folder
+    Serial.println("Invalid folder.");
+  }
+}
+
+// Function to check if a section is available
+bool isSectionAvailable(String section) {
+  // Measure distance using HC-SR04 sensor
+  int distance = sonar.ping_cm();
+
+  // Calculate whether the section is occupied or available based on distance
+  // Adjust threshold and distances based on your setup
+  if (section == "A") {
+    return distance > 10; // Adjust threshold distance for section A
+  } else if (section == "B") {
+    return distance > 10; // Adjust threshold distance for section B
+  } else {
+    return false; // Invalid section
+  }
+}
+
+void loop() {
+  // Your main loop code here
+}
